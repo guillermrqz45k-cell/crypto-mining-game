@@ -31,28 +31,33 @@ cp .env.example .env   # rellenar SECRET_KEY y (cuando AMO las pase) las direcci
 | `DATABASE_URL` | no | SQLite por defecto (`sqlite:///./data/mining.db`); PostgreSQL si es `postgres://...` |
 | `SECRET_KEY` | **sí en prod.** | Clave JWT. Sin ella se genera una efímera solo para desarrollo (se avisa en logs) y las sesiones se invalidan al reiniciar |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | sí para admin | Primer admin, creado al arrancar si no existe |
-| `DEPOSIT_BSC_ADDRESS` | cuando AMO la pase | Dirección USDT BEP-20 que recibe los depósitos BSC. **Sin ella, ningún depósito BSC se acredita** |
-| `DEPOSIT_TRON_ADDRESS` | cuando AMO la pase | Dirección USDT TRC-20 que recibe los depósitos TRON. **Sin ella, ningún depósito TRON se acredita** |
-| `BSCSCAN_API_KEY` | cuando AMO la pase | Clave BscScan para verificar depósitos BSC on-chain |
-| `TRONGRID_API_KEY` | cuando AMO la pase | Clave TronGrid para verificar depósitos TRON on-chain |
+| `DEPOSIT_BSC_ADDRESS` | **sí (ya definida)** | Dirección USDT BEP-20 que recibe los depósitos: `0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d` (la de AMO, misma que en Dragon Land). **Sin ella, ningún depósito BSC se acredita**. UNA SOLA dirección: no hay TRON |
+| `BSCSCAN_API_KEY` | cuando AMO la pase | Clave BscScan para verificar depósitos BSC on-chain (y para el escaneo automático) |
 
-**Sin direcciones de depósito y sin claves de API, todo depósito queda en
-`pending_verification` y NUNCA se acredita.** No hay ninguna dirección ni
-dato de depósito inventado en el código: `.env.example` las deja vacías.
+**Sin dirección de depósito y sin clave de API, todo depósito queda en
+`pending_verification` y NUNCA se acredita automáticamente.** La dirección
+BSC ya está definida en `.env.example` (`0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d`).
+No hay ninguna dirección inventada en el código.
 
 ## Economía (valores por defecto, configurables en `/api/admin/config`)
 
 - **HCKCOIN (HCK)**: moneda del juego, puntos internos, NO token on-chain.
   Tasa de retiro: **10.000 HCK = 1 USDT** (`hck_to_usdt_rate`).
-- **Producción**: HCK/hora = `hashrate_total × 10` (`production_per_hash`).
-  Ej: 10 H/s → 100 HCK/h. Se calcula en el **servidor** por tiempo
+- **Producción**: HCK/hora = `hashrate_total × 20,83` (`production_per_hash`).
+  Ej: 10 H/s → 208,3 HCK/h. Se calcula en el **servidor** por tiempo
   transcurrido (sesión con `started_at`); sin minería activa no hay producción.
-- **Capacidad ("nido")**: 8 horas de producción (`storage_hours`); si se llena,
-  la minería se detiene hasta recolectar.
+- **Capacidad ("nido")**: 24 horas de producción (`storage_hours`); si se llena,
+  la minería se detiene hasta recolectar. Recogiendo a diario se captura el día
+  completo: el nivel 1 ($10, 10 H/s) **recupera su inversión en 20 días** y a
+  mayor inversión, más rápida la recuperación (nivel 2: ~16,7 días; nivel 3:
+  15 días; nivel 4: 14 días). Tasa fija: **10.000 HCK = 1 USDT**.
 - **Máquinas** — 9 niveles (compra con saldo USDT depositado, salvo el nivel 0
   que es gratis y lo recibe todo usuario al registrarse). Precios guiados por
   la escalera de GoMining (potencia casi duplicada por nivel, ~$17-22 por TH
   en sus niveles altos): los niveles 6-8 usan $1.400 / $2.800 / $5.000.
+  **Solo los niveles 0-4 están disponibles; los niveles 5-8 están bloqueados
+  ("Próximamente")** y comprarlos devuelve 403. El catálogo muestra
+  `available` y `payback_days` por máquina.
 
   | id | Nivel | Nombre | Precio | Hashrate |
   |---|---|---|---|---|
@@ -77,23 +82,40 @@ dato de depósito inventado en el código: `.env.example` las deja vacías.
   Recolecta 1000 HCK (200 HCK), Compra tu primera máquina (500 HCK, una vez),
   Invita 1 amigo (500 HCK), Reclama el bono diario (100 HCK).
 
-## Depósitos USDT (verificación on-chain REAL)
+## Depósitos USDT (verificación on-chain REAL, una sola dirección BSC)
 
-`POST /api/wallet/deposits {tx_hash, network: "BSC"|"TRON", amount_usdt}`:
+Dirección única de depósito (BSC/BEP-20): `0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d`
+(la de AMO, misma que en Dragon Land). **No hay dirección TRON.**
+
+`POST /api/wallet/deposits {tx_hash, network: "BSC", amount_usdt}` (registro
+manual) y `GET /api/wallet/deposit-info` (dirección, mínimo 1 USDT, estado de
+la acreditación automática, dirección BSC guardada del usuario):
 
 1. **Idempotente por `tx_hash` único**: repetirlo devuelve **409** y no hay
    doble crédito.
-2. **Sin claves de API** (`BSCSCAN_API_KEY` / `TRONGRID_API_KEY`) → estado
-   `pending_verification`, **nunca se acredita**.
-3. **Con claves**, se verifica on-chain:
-   - **BSC**: BscScan `tokentx` del contrato USDT BEP-20
-     `0x55d398326f99059fF775485246999027B3197955`. El tx debe existir,
-     `to == DEPOSIT_BSC_ADDRESS` y `value == amount` (18 decimales).
-   - **TRON**: TronGrid TRC-20. `to == DEPOSIT_TRON_ADDRESS`,
-     `value == amount` (6 decimales), contrato USDT TRC-20
-     `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`.
+2. **Sin `BSCSCAN_API_KEY`** → estado `pending_verification`, **nunca se
+   acredita automáticamente**. El admin lo aprueba a mano con
+   `POST /api/admin/deposits/{id}/approve` tras revisar el tx_hash en BscScan
+   (acredita el saldo y queda en el audit log).
+3. **Con clave**, se verifica on-chain con BscScan `tokentx` del contrato USDT
+   BEP-20 `0x55d398326f99059fF775485246999027B3197955`. El tx debe existir,
+   `to == DEPOSIT_BSC_ADDRESS` y `value == amount` (18 decimales).
 4. Solo si **todo coincide** se acredita el USDT. Si no, estado `rejected`
    con el motivo. Error de red/API → queda pendiente, nunca se acredita.
+
+### Acreditación automática (escaneo en segundo plano)
+
+El usuario guarda su dirección BSC en su perfil (`PUT /api/wallet/addresses`).
+Cada 5 minutos (`SCAN_INTERVAL_SECONDS`, desactivable con `SCAN_ENABLED=false`)
+el backend consulta BscScan por las transferencias USDT entrantes a la
+dirección de depósito; por cada una busca al usuario cuya dirección guardada
+coincida con el remitente y acredita el depósito (idempotente por tx_hash,
+mínimo 1 USDT, con audit log). Solo activo con dirección + `BSCSCAN_API_KEY`
+configuradas; sin ellas queda inactivo sin romper nada. El admin puede
+disparar un escaneo manual con `POST /api/wallet/deposits/scan`.
+La sala de minería del frontend (`MiningRoom`) muestra los equipos reales del
+usuario con ventiladores, LEDs, temperatura y hashrate, y un contador de HCK
+en vivo.
 
 ## Retiros (nunca automáticos)
 
@@ -138,6 +160,7 @@ Auth: `POST /api/auth/register`, `POST /api/auth/login` · Perfil: `GET /api/me`
 Admin (requiere `is_admin=true`): `GET /api/admin/stats`,
 `GET /api/admin/users?search=`, `GET /api/admin/users/{id}`,
 `POST /api/admin/users/{id}/ban|unban`, `GET /api/admin/deposits`,
+`POST /api/admin/deposits/{id}/approve` (acreditación manual de depósitos),
 `GET /api/admin/withdrawals`, `POST /api/admin/withdrawals/{id}/approve|reject|mark-paid`,
 `GET /api/admin/reward-pool`, `POST /api/admin/reward-pool/fund`,
 `GET|PUT /api/admin/config`, `GET /api/admin/audit`,
@@ -146,21 +169,26 @@ Admin (requiere `is_admin=true`): `GET /api/admin/stats`,
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q   # 35 tests, SQLite temporal, mocks para BscScan/TronGrid
+.venv/bin/python -m pytest -q   # 53 tests, SQLite temporal, mocks para BscScan
 ```
 
 Cubren: registro/login (duplicado, contraseña corta), minería (producción por
-tiempo, tope de capacidad, sin minería no produce, collect suma XP y sube de
-nivel), compra de máquina (402 sin saldo, descuento y hashrate), depósito
-idempotente (409 y un solo crédito; mock: éxito acredita, monto distinto no
-acredita, sin claves queda pendiente), retiro con comisión y aprobación
-(mínimo, 2%, sin fondos → `waiting_funds`, con fondos → `approved`,
-`mark-paid` con tx_hash), anti-manipulación de saldo y rate limiting
-(11.º login en un minuto → 429).
+tiempo a 20,83 HCK por H/s por hora, tope de capacidad 24 h, sin minería no
+produce, collect suma XP y sube de nivel), compra de máquina (402 sin saldo,
+descuento y hashrate; niveles bloqueados → 403), catálogo con disponibilidad
+y payback (nivel 1 = 20 días), depósito idempotente (409 y un solo crédito;
+mock: éxito acredita, monto distinto no acredita, sin claves queda pendiente),
+escaneo automático (acredita por remitente mockeado, idempotente, remitente
+desconocido no se acredita, inactivo sin configurar, error de API no rompe),
+aprobación manual de depósitos por el admin (acredita una sola vez),
+retiro con comisión y aprobación (mínimo, 2%, sin fondos → `waiting_funds`,
+con fondos → `approved`, `mark-paid` con tx_hash), anti-manipulación de
+saldo y rate limiting (11.º login en un minuto → 429).
 
 ## Pendiente (lo tiene que pasar AMO)
 
-- `DEPOSIT_BSC_ADDRESS` y `DEPOSIT_TRON_ADDRESS` reales.
-- `BSCSCAN_API_KEY` y `TRONGRID_API_KEY`.
+- `BSCSCAN_API_KEY` (para la acreditación automática; mientras tanto, el admin
+  aprueba depósitos a mano tras revisar BscScan).
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` y `SECRET_KEY` de producción.
-- Despliegue (no desplegado: solo local + tests).
+- Despliegue (no desplegado: solo local + tests). La dirección BSC de depósito
+  ya está definida: `0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d`. No hay TRON.
