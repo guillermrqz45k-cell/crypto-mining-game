@@ -21,6 +21,9 @@ DEPOSIT_TRON_ADDRESS = os.environ.get("DEPOSIT_TRON_ADDRESS") or None
 BSCSCAN_API_KEY = os.environ.get("BSCSCAN_API_KEY") or None
 TRONGRID_API_KEY = os.environ.get("TRONGRID_API_KEY") or None
 
-# USDT BEP-20 (BSC) y TRC-20 (TRON)
+# Escaneo automatico de depositos (cada 5 min por defecto, solo si hay
+# direcciones de deposito y API keys configuradas; ver services/scanner.py).
+SCAN_ENABLED = os.environ.get("SCAN_ENABLED", "true").lower() in ("1", "true", "yes")
+SCAN_INTERVAL_SECONDS = int(os.environ.get("SCAN_INTERVAL_SECONDS", "300"))
 USDT_BSC_CONTRACT = "0x55d398326f99059fF775485246999027B3197955"
 USDT_TRON_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
