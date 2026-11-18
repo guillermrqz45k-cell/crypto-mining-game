@@ -30,6 +30,7 @@ export default function Layout({ user, onLogout, onUserChange }) {
     <div className="app">
       <aside className="sidebar">
         <div className="logo">⛏️ <span>CRYPTO MINING GAME</span></div>
+        <p className="small gold">Creador por Dark Mous</p>
         <p className="small muted">Hola, <b style={{ color: 'var(--text)' }}>{user?.username}</b> · Nivel {user?.level ?? 1}</p>
         {nav.map((n) => (
           <button key={n.id} className={`navlink ${page === n.id ? 'active' : ''}`} onClick={() => setPage(n.id)}>
@@ -52,7 +53,8 @@ export default function Layout({ user, onLogout, onUserChange }) {
         {page === 'profile' && <Profile user={user} onLogout={onLogout} />}
         {page === 'admin' && user?.is_admin && <Admin />}
         <footer className="footer">
-          Minería virtual. Las recompensas dependen del fondo de recompensas disponible. Sin rentabilidad garantizada.
+          Creador por Dark Mous
+          <br />Minería virtual. Las recompensas dependen del fondo de recompensas disponible. Sin rentabilidad garantizada.
           <br />CRYPTO MINING GAME · HCK es una moneda virtual del juego, no un activo financiero.
         </footer>
       </main>
