@@ -1,0 +1,88 @@
+# CRYPTO MINING GAME — docker-compose (desarrollo / producción local)
+# Uso:
+#   cp .env.example .env   # y rellenar las variables
+#   docker compose up --build
+# API: http://localhost:8000 — Frontend: http://localhost:3000
+# No hay secretos reales en este archivo: todo sale de variables de entorno.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: crypto-mining-game-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cryptomining}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cryptomining_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-crypto_mining_game}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Ejecuta el esquema en el primer arranque (volumen vacío):
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cryptomining} -d ${POSTGRES_DB:-crypto_mining_game}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - crypto-mining-game-net
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crypto-mining-game-api
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cryptomining}:${POSTGRES_PASSWORD:-cryptomining_dev_password}@postgres:5432/${POSTGRES_DB:-crypto_mining_game}
+      SECRET_KEY: ${SECRET_KEY:-cambiar_esta_clave_secreta_en_produccion}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      DEPOSIT_BSC_ADDRESS: ${DEPOSIT_BSC_ADDRESS:-}
+      DEPOSIT_TRON_ADDRESS: ${DEPOSIT_TRON_ADDRESS:-}
+      BSCSCAN_API_KEY: ${BSCSCAN_API_KEY:-}
+      TRONGRID_API_KEY: ${TRONGRID_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - crypto-mining-game-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: crypto-mining-game-frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_WALLETCONNECT_PROJECT_ID: ${VITE_WALLETCONNECT_PROJECT_ID:-}
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto-mining-game-net
+
+volumes:
+  postgres_data:
+
+networks:
+  crypto-mining-game-net:
+    driver: bridge
