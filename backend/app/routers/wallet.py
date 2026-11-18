@@ -1,4 +1,7 @@
-"""Wallet: saldo, direcciones de deposito, registro de depositos y movimientos."""
+"""Wallet: saldo, direccion de deposito BSC, registro de depositos y movimientos.
+Recarga automatica: el usuario guarda su direccion BSC y el escaneo
+en segundo plano acredita los pagos USDT entrantes a la direccion del proyecto.
+"""
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,11 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.core import config
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_admin, get_current_user
 from app.models.models import Deposit, Transaction, User
-from app.services import verification
-from app.services.economy import add_transaction, audit, get_config
+from app.services import scanner, verification
+from app.services.economy import MIN_DEPOSIT_USDT, add_transaction, audit, get_config
 from app.services.mining import now_utc
+from app.routers.withdrawals import BSC_RE
 
 router = APIRouter(prefix="/api/wallet", tags=["wallet"])
 
@@ -20,6 +24,10 @@ class DepositIn(BaseModel):
     tx_hash: str = Field(min_length=10, max_length=128)
     network: str  # BSC | TRON
     amount_usdt: Decimal = Field(gt=0)
+
+
+class AddressesIn(BaseModel):
+    bsc_address: str | None = None
 
 
 @router.get("")
@@ -35,6 +43,48 @@ def wallet(db: Session = Depends(get_db), user: User = Depends(get_current_user)
         },
         "hck_to_usdt_rate": float(cfg.hck_to_usdt_rate),
     }
+
+
+@router.get("/deposit-info")
+def deposit_info(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Datos para la seccion 'Recargar USDT': UNA SOLA direccion de deposito
+    (BSC/BEP-20), monto minimo, si la acreditacion automatica esta activa y la
+    direccion BSC guardada del usuario (para que el escaneo identifique sus pagos)."""
+    cfg = get_config(db)
+    configured = scanner.scan_configured()
+    return {
+        "address": config.DEPOSIT_BSC_ADDRESS,
+        "network": "BSC",
+        "configured": bool(config.DEPOSIT_BSC_ADDRESS),
+        "min_deposit_usdt": float(MIN_DEPOSIT_USDT),
+        "auto_credit": configured,
+        "hck_to_usdt_rate": float(cfg.hck_to_usdt_rate),
+        "my_address": user.bsc_address,
+    }
+
+
+@router.put("/addresses")
+def save_addresses(data: AddressesIn, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Guarda la direccion de billetera BSC del usuario (remitente de sus pagos).
+    Solo la direccion: nunca se piden ni se guardan claves privadas."""
+    if data.bsc_address is not None:
+        addr = data.bsc_address.strip()
+        if addr and not BSC_RE.match(addr):
+            raise HTTPException(status_code=422, detail="Direccion BSC invalida (0x + 40 hex)")
+        user.bsc_address = addr or None
+    audit(db, "wallet_addresses_saved", user.id,
+          f"direccion BSC guardada: {'si' if user.bsc_address else 'no'}")
+    db.commit()
+    return {"bsc_address": user.bsc_address}
+
+
+@router.post("/deposits/scan")
+def manual_scan(db: Session = Depends(get_db), admin: User = Depends(get_admin)):
+    """Dispara un escaneo manual de depositos entrantes (solo admin).
+    Sin direcciones ni API keys configuradas, devuelve inactivo sin romper nada."""
+    result = scanner.scan_all(db)
+    audit(db, "deposit_scan_manual", admin.id, f"escaneo manual: {result}")
+    return result
 
 
 @router.post("/deposits", status_code=201)

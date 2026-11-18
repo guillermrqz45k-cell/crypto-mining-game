@@ -105,6 +105,33 @@ def all_deposits(db: Session = Depends(get_db), admin: User = Depends(get_admin)
              "created_at": d.created_at.isoformat()} for d in deps]
 
 
+@router.post("/deposits/{deposit_id}/approve")
+def approve_deposit(deposit_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin)):
+    """Aprobacion manual de un deposito en pending_verification: el admin revisa
+    el tx_hash en BscScan y acredita el saldo al usuario. Para usar mientras no
+    haya BSCSCAN_API_KEY (sin ella el escaneo automatico esta inactivo)."""
+    dep = db.query(Deposit).filter(Deposit.id == deposit_id).first()
+    if not dep:
+        raise HTTPException(status_code=404, detail="Deposito no encontrado")
+    if dep.status != "pending_verification":
+        raise HTTPException(status_code=422, detail=f"Deposito en estado {dep.status}, no se puede aprobar")
+    user = db.query(User).filter(User.id == dep.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario del deposito no encontrado")
+    dep.status = "verified"
+    dep.verified_at = now_utc()
+    dep.reason = "aprobado manualmente por el admin (revision en BscScan)"
+    user.usdt_balance = Decimal(user.usdt_balance) + Decimal(dep.amount_usdt)
+    add_transaction(db, user.id, "deposit", amount_usdt=Decimal(dep.amount_usdt),
+                    description=f"Deposito aprobado manualmente {dep.network} {dep.tx_hash}")
+    audit(db, "deposit_manual_approve", admin.id,
+          f"deposito {dep.id} aprobado: +{dep.amount_usdt} USDT a {user.username} ({dep.network})")
+    db.commit()
+    return {"id": dep.id, "user_id": dep.user_id, "tx_hash": dep.tx_hash,
+            "network": dep.network, "amount_usdt": float(dep.amount_usdt),
+            "status": dep.status}
+
+
 @router.get("/withdrawals")
 def all_withdrawals(db: Session = Depends(get_db), admin: User = Depends(get_admin)):
     return [_wd_out(w, db) for w in db.query(Withdrawal).order_by(Withdrawal.created_at.desc()).limit(200).all()]

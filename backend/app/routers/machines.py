@@ -11,7 +11,7 @@ from app.models.models import OwnedMachine, User
 from app.services.economy import (
     MACHINES, MAX_OVERCLOCK, STARTER_MACHINE_ID, add_transaction, audit,
     check_level_up, get_config, grant_starter_machine, machine_hashrate,
-    upgrade_cost, user_hashrate,
+    payback_days, upgrade_cost, user_hashrate,
 )
 from app.services.missions import add_progress
 
@@ -27,11 +27,16 @@ class UpgradeIn(BaseModel):
 
 
 @router.get("")
-def catalog():
+def catalog(db: Session = Depends(get_db)):
+    cfg = get_config(db)
     return [{"id": m["id"], "name": m["name"], "price_usdt": float(m["price_usdt"]),
              "hashrate": float(m["hashrate"]),
              "level": int(m["id"].split("_")[1]),
-             "is_starter": m["id"] == STARTER_MACHINE_ID} for m in MACHINES.values()]
+             "is_starter": m["id"] == STARTER_MACHINE_ID,
+             "available": bool(m.get("available", True)),
+             "payback_days": payback_days(m, Decimal(cfg.production_per_hash),
+                                          Decimal(cfg.hck_to_usdt_rate))}
+            for m in MACHINES.values()]
 
 
 @router.get("/mine")
@@ -54,6 +59,9 @@ def buy(data: BuyIn, db: Session = Depends(get_db), user: User = Depends(get_cur
     machine = MACHINES.get(data.machine_id)
     if not machine:
         raise HTTPException(status_code=404, detail="Maquina no encontrada")
+    # Niveles 5-8 bloqueados ("Proximamente"): no se pueden comprar.
+    if not machine.get("available", True):
+        raise HTTPException(status_code=403, detail=f"{machine['name']} esta bloqueado: Proximamente disponible")
     # Nivel 0: gratis, no se compra. Se otorga al registrarse; si un usuario
     # antiguo no lo tiene, puede reclamarlo aqui sin pagar.
     if data.machine_id == STARTER_MACHINE_ID:

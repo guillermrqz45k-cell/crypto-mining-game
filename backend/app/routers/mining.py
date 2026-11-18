@@ -10,7 +10,7 @@ from app.core.deps import get_current_user
 from app.models.models import User
 from app.services import mining as mining_svc
 from app.services.economy import (
-    add_transaction, audit, check_level_up, user_hashrate,
+    add_transaction, audit, check_level_up, get_config, user_hashrate,
 )
 from app.services.missions import add_progress
 
@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/mining", tags=["mining"])
 
 
 def _status(db: Session, user: User) -> dict:
+    cfg = get_config(db)
     hashrate = user_hashrate(db, user.id)
     pending = mining_svc.pending_hck(db, user)
     capacity = mining_svc.capacity_hck(db, user)
@@ -28,6 +29,9 @@ def _status(db: Session, user: User) -> dict:
         "capacity_hck": float(capacity),
         "started_at": user.mining_started_at.isoformat() if user.mining_started_at else None,
         "storage_full": pending >= capacity and capacity > 0,
+        "production_per_hash": float(cfg.production_per_hash),
+        "storage_hours": float(cfg.storage_hours),
+        "hck_per_second": float(hashrate * cfg.production_per_hash / Decimal("3600")),
     }
 
 
