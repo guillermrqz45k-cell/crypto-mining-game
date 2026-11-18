@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, friendlyError } from '../api/client.js'
 import ProductionChart from '../components/ProductionChart.jsx'
+import MiningRoom from '../components/MiningRoom.jsx'
 import Confetti from '../components/Confetti.jsx'
 
 function useAnimatedNumber(target) {
@@ -25,6 +26,8 @@ function useAnimatedNumber(target) {
 export default function Dashboard({ user, onUserChange }) {
   const [status, setStatus] = useState(null)
   const [chart, setChart] = useState([])
+  const [machines, setMachines] = useState([])
+  const [poolBalance, setPoolBalance] = useState(null)
   const [error, setError] = useState('')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
@@ -40,7 +43,12 @@ export default function Dashboard({ user, onUserChange }) {
       const st = await api.stats()
       const arr = st?.production_last_14_days || st?.production || st?.history || st?.daily || []
       setChart(Array.isArray(arr) ? arr : [])
+      if (st?.reward_pool_balance !== undefined) setPoolBalance(st.reward_pool_balance)
     } catch { /* el gráfico es opcional: si /api/stats no existe, se muestra el aviso vacío */ }
+    try {
+      const m = await api.myMachines()
+      setMachines(Array.isArray(m) ? m : m?.machines || [])
+    } catch { setMachines([]) }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -120,6 +128,16 @@ export default function Dashboard({ user, onUserChange }) {
           <button className="btn btn-gold" onClick={collect} disabled={busy || pending <= 0}>💰 RECOLECTAR {pending > 0 ? `(${Number(pending).toLocaleString('es')} HCK)` : ''}</button>
         </div>
       </div>
+
+      <MiningRoom
+        machines={machines}
+        hashrate={status?.hashrate ?? user?.hashrate ?? 0}
+        productionPerHash={status?.production_per_hash ?? 20.83}
+        pendingHck={pending}
+        capacityHck={capacity}
+        miningActive={!!status?.mining_active}
+        poolBalance={poolBalance}
+      />
 
       <div className="card mb">
         <h3>📦 Almacén de HCK</h3>

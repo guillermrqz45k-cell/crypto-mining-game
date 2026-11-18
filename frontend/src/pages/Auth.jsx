@@ -31,6 +31,7 @@ export default function Auth({ onAuth }) {
     <div className="auth-wrap">
       <div className="auth-logo">⛏️</div>
       <h1 className="center"><span className="gold">CRYPTO MINING GAME</span></h1>
+      <p className="center small gold">Creador por Dark Mous</p>
       <p className="center muted mb">Minería virtual · Gana HCK · Compra máquinas · Sube de nivel</p>
       <div className="card">
         <div className="tabs">

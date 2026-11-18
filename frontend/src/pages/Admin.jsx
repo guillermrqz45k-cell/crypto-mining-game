@@ -104,10 +104,6 @@ export default function Admin() {
               <label htmlFor="cfg-bsc">Dirección de depósito BSC (BEP-20)</label>
               <input id="cfg-bsc" value={config.deposit_address_bsc ?? config.bsc_deposit_address ?? ''} onChange={(e) => setConfig({ ...config, deposit_address_bsc: e.target.value })} placeholder="0x…" />
             </div>
-            <div className="field">
-              <label htmlFor="cfg-tron">Dirección de depósito TRON (TRC-20)</label>
-              <input id="cfg-tron" value={config.deposit_address_tron ?? config.tron_deposit_address ?? ''} onChange={(e) => setConfig({ ...config, deposit_address_tron: e.target.value })} placeholder="T…" />
-            </div>
             <button className="btn btn-primary" type="submit" disabled={busy}>Guardar configuración</button>
           </form>
           <p className="small muted mt">Los nombres exactos de los campos los define el backend (GET/PUT /api/admin/config); se envían tal cual se editan.</p>
@@ -155,10 +151,11 @@ export default function Admin() {
 
       {tab === 'deposits' && (
         <div className="card"><h3>📥 Depósitos</h3>
+          <p className="small muted mt">Revisa el tx_hash en BscScan y aprueba para acreditar el saldo al usuario. Sin BSCSCAN_API_KEY, la aprobación manual es la vía de acreditación.</p>
           {rows.length === 0 ? <p className="empty">Sin depósitos.</p> : (
-            <div className="table-wrap"><table><thead><tr><th>Usuario</th><th>Red</th><th>Monto</th><th>Tx hash</th><th>Estado</th></tr></thead>
+            <div className="table-wrap"><table><thead><tr><th>Usuario</th><th>Red</th><th>Monto</th><th>Tx hash</th><th>Estado</th><th>Acción</th></tr></thead>
             <tbody>{rows.map((d, i) => (
-              <tr key={d.id ?? i}><td>{d.username || d.user_id || '—'}</td><td>{d.network}</td><td>${Number(d.amount_usdt ?? 0).toLocaleString('es', { minimumFractionDigits: 2 })}</td><td className="mono small">{d.tx_hash ? `${String(d.tx_hash).slice(0, 12)}…` : '—'}</td><td>{d.status}</td></tr>
+              <tr key={d.id ?? i}><td>{d.username || d.user_id || '—'}</td><td>{d.network}</td><td>${Number(d.amount_usdt ?? 0).toLocaleString('es', { minimumFractionDigits: 2 })}</td><td className="mono small">{d.tx_hash ? `${String(d.tx_hash).slice(0, 12)}…` : '—'}</td><td>{d.status}</td><td>{d.status === 'pending_verification' ? <button className="btn btn-sm btn-gold" disabled={busy} onClick={() => act(() => api.adminApproveDeposit(d.id), `Depósito #${d.id} aprobado y acreditado.`)}>✅ Aprobar</button> : '—'}</td></tr>
             ))}</tbody></table></div>
           )}
         </div>
