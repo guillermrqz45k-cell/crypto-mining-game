@@ -36,6 +36,10 @@ class User(Base):
     mining_active = Column(Boolean, default=False, nullable=False)
     mining_started_at = Column(DateTime, nullable=True)
     mining_pending_hck = Column(Numeric(20, 4), default=Decimal("0"), nullable=False)
+    # Direcciones de billetera del usuario (para acreditar depositos automaticos
+    # por remitente). Solo direcciones, NUNCA claves privadas.
+    bsc_address = Column(String(128), nullable=True)
+    tron_address = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     machines = relationship("OwnedMachine", back_populates="user", cascade="all, delete-orphan")
@@ -122,8 +126,11 @@ class AppConfig(Base):
     withdrawal_fee_percent = Column(Numeric(10, 4), default=Decimal("2"), nullable=False)
     min_withdrawal_usdt = Column(Numeric(20, 6), default=Decimal("10"), nullable=False)
     referral_bonus_hck = Column(Numeric(20, 4), default=Decimal("500"), nullable=False)
-    production_per_hash = Column(Numeric(10, 4), default=Decimal("10"), nullable=False)
-    storage_hours = Column(Numeric(10, 4), default=Decimal("8"), nullable=False)
+    # Economia de recuperacion (AMO, 2026-11-17): 20,83 HCK por H/s por hora
+    # con tope de 24 h -> el nivel 1 ($10, 10 H/s) recupera en 20 dias
+    # recogiendo a diario; a mayor inversion, mas rapida la recuperacion.
+    production_per_hash = Column(Numeric(10, 4), default=Decimal("20.83"), nullable=False)
+    storage_hours = Column(Numeric(10, 4), default=Decimal("24"), nullable=False)
 
 
 class AuditLog(Base):
