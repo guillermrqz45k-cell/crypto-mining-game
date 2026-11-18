@@ -15,9 +15,9 @@ def test_collect_ignores_client_supplied_balance(client, db):
     assert me["hck_balance"] < 1  # sin tiempo transcurrido no hay nada que recolectar
     # Tambien en compra: campos extra no crean saldo
     r = client.post("/api/machines/buy",
-                    json={"machine_id": "level_8", "usdt_balance": 99999, "hck_balance": 99999},
+                    json={"machine_id": "level_4", "usdt_balance": 99999, "hck_balance": 99999},
                     headers=auth_headers(token))
-    assert r.status_code == 402  # saldo real insuficiente (90 USDT < 5000), no el inventado
+    assert r.status_code == 402  # saldo real insuficiente (90 USDT < 350), no el inventado
 
 
 def test_rate_limit_login_11th_429(client, db):

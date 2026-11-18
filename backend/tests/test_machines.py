@@ -29,6 +29,20 @@ def test_catalog_has_nine_levels(client):
     assert by_id["level_0"]["is_starter"] is True
     assert by_id["level_0"]["level"] == 0
     assert by_id["level_8"]["level"] == 8
+    # Disponibilidad: solo 0-4 disponibles; 5-8 bloqueados ("Proximamente")
+    for mid in ("level_0", "level_1", "level_2", "level_3", "level_4"):
+        assert by_id[mid]["available"] is True, mid
+    for mid in ("level_5", "level_6", "level_7", "level_8"):
+        assert by_id[mid]["available"] is False, mid
+    # Payback con 20,83 HCK por H/s por hora y 10.000 HCK = 1 USDT:
+    # nivel 1 -> 20 dias; a mayor inversion, mas rapida la recuperacion
+    assert by_id["level_0"]["payback_days"] is None
+    assert abs(by_id["level_1"]["payback_days"] - 20) < 0.1
+    assert abs(by_id["level_2"]["payback_days"] - 16.7) < 0.1
+    assert abs(by_id["level_3"]["payback_days"] - 15) < 0.1
+    assert abs(by_id["level_4"]["payback_days"] - 14) < 0.1
+    assert abs(by_id["level_5"]["payback_days"] - 12.5) < 0.1
+    assert abs(by_id["level_8"]["payback_days"] - 8.3) < 0.1
 
 
 def test_new_user_starts_with_free_starter(client, db):
@@ -71,18 +85,31 @@ def test_buy_ok_discounts_and_raises_hashrate(client, db):
     assert {m["machine_id"] for m in mine} == {"level_0", "level_2"}
 
 
+def test_buy_locked_level_403(client, db):
+    # Niveles 5-8 bloqueados: ni con saldo se pueden comprar
+    _, token = make_user(client, db, "shop7", usdt=20000)
+    for mid in ("level_5", "level_6", "level_7", "level_8"):
+        r = client.post("/api/machines/buy", json={"machine_id": mid}, headers=auth_headers(token))
+        assert r.status_code == 403, (mid, r.text)
+        assert "Proximamente" in r.json()["detail"]
+    me = client.get("/api/me", headers=auth_headers(token)).json()
+    assert me["usdt_balance"] == 20000  # no se desconto nada
+
+
 def test_buy_each_level_price_and_hashrate(client, db):
-    # Compra de cada nivel de pago con su precio exacto
+    # Compra de cada nivel DISPONIBLE (1-4) con su precio exacto
     _, token = make_user(client, db, "shop5", usdt=20000)
     for mid, (price, hr) in LEVELS.items():
         if mid == "level_0":
             continue
+        if mid in ("level_5", "level_6", "level_7", "level_8"):
+            continue  # bloqueados
         r = client.post("/api/machines/buy", json={"machine_id": mid}, headers=auth_headers(token))
         assert r.status_code == 200, (mid, r.text)
     me = client.get("/api/me", headers=auth_headers(token)).json()
-    total_hr = 5 + 10 + 60 + 200 + 500 + 1200 + 2500 + 5500 + 12000
+    total_hr = 5 + 10 + 60 + 200 + 500
     assert me["hashrate"] == total_hr
-    total_price = 10 + 50 + 150 + 350 + 750 + 1400 + 2800 + 5000
+    total_price = 10 + 50 + 150 + 350
     assert me["usdt_balance"] == 20000 - total_price
 
 
