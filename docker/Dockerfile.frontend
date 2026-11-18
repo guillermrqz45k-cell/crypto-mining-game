@@ -1,0 +1,29 @@
+# CRYPTO MINING GAME — Frontend (React + Vite)
+# Multi-stage: build con Node 20 y servicio estático con nginx:alpine.
+# Se construye desde docker-compose.yml (contexto = raíz del proyecto,
+# dockerfile docker/Dockerfile.frontend).
+# Variables de build: VITE_API_URL, VITE_WALLETCONNECT_PROJECT_ID.
+
+# ---- Etapa 1: build ----
+FROM node:20 AS build
+WORKDIR /app
+
+# Instalar dependencias primero (mejor uso de la caché de Docker)
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+# Copiar el código y compilar
+COPY frontend/. .
+ARG VITE_API_URL=http://localhost:8000
+ARG VITE_WALLETCONNECT_PROJECT_ID=
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WALLETCONNECT_PROJECT_ID=$VITE_WALLETCONNECT_PROJECT_ID
+RUN npm run build
+
+# ---- Etapa 2: servir con nginx ----
+FROM nginx:alpine
+# Configuración SPA: todas las rutas sirven index.html (React Router)
+COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
