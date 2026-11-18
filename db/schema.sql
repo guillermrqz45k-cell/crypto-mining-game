@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS users (
     hck_balance   NUMERIC(20, 2) NOT NULL DEFAULT 0 CHECK (hck_balance >= 0),
     referral_code VARCHAR(20)  NOT NULL UNIQUE,
     referred_by   INTEGER      REFERENCES users(id) ON DELETE SET NULL,
+    -- Direcciones de billetera del usuario (remitente de sus pagos BSC):
+    -- el escaner automatico las usa para identificar sus depositos. Solo
+    -- direcciones, NUNCA claves privadas.
+    bsc_address   VARCHAR(128),
+    tron_address  VARCHAR(128),
     ip_address    INET,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     last_login_at TIMESTAMPTZ
@@ -44,6 +49,7 @@ CREATE TABLE IF NOT EXISTS machines_catalog (
     name        VARCHAR(100) NOT NULL,
     price_usdt  NUMERIC(18, 6) NOT NULL CHECK (price_usdt >= 0),  -- 0 = nivel 0 gratis
     hashrate    INTEGER      NOT NULL CHECK (hashrate > 0),  -- H/s
+    available   BOOLEAN      NOT NULL DEFAULT TRUE,  -- FALSE = bloqueado ("Proximamente")
     description TEXT         NOT NULL DEFAULT ''
 );
 
@@ -262,17 +268,18 @@ CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users (referral_code);
 -- Datos iniciales
 -- ============================================================================
 
--- Catálogo de 9 niveles (nivel 0 gratis: Minero Inicial al registrarse)
-INSERT INTO machines_catalog (key, name, price_usdt, hashrate, description) VALUES
-    ('level_0', 'Minero Inicial',   0,     5,     'Minero inicial gratis: todo usuario lo recibe al registrarse.'),
-    ('level_1', 'Minero USB',       10,    10,    'Minería básica por USB. Ideal para empezar.'),
-    ('level_2', 'Rig GPU',          50,    60,    'Rig de GPUs para minar con más potencia.'),
-    ('level_3', 'ASIC S9',          150,   200,   'Minero ASIC de alto rendimiento.'),
-    ('level_4', 'Granja ASIC',      350,   500,   'Granja de ASICs: potencia seria para mineros avanzados.'),
-    ('level_5', 'Rig Cuántico',     750,   1200,  'Potencia cuántica para granjas grandes.'),
-    ('level_6', 'Centro de Datos',  1400,  2500,  'Un centro de datos completo a tu servicio.'),
-    ('level_7', 'Granja Cuántica',  2800,  5500,  'Granja cuántica de élite. Producción masiva.'),
-    ('level_8', 'Núcleo HCK',      5000,  12000, 'El núcleo definitivo del juego. Potencia máxima.')
+-- Catálogo de 9 niveles (nivel 0 gratis: Minero Inicial al registrarse).
+-- Solo 0-4 disponibles; 5-8 bloqueados ("Proximamente").
+INSERT INTO machines_catalog (key, name, price_usdt, hashrate, available, description) VALUES
+    ('level_0', 'Minero Inicial',   0,     5,     TRUE,  'Minero inicial gratis: todo usuario lo recibe al registrarse.'),
+    ('level_1', 'Minero USB',       10,    10,    TRUE,  'Minería básica por USB. Ideal para empezar.'),
+    ('level_2', 'Rig GPU',          50,    60,    TRUE,  'Rig de GPUs para minar con más potencia.'),
+    ('level_3', 'ASIC S9',          150,   200,   TRUE,  'Minero ASIC de alto rendimiento.'),
+    ('level_4', 'Granja ASIC',      350,   500,   TRUE,  'Granja de ASICs: potencia seria para mineros avanzados.'),
+    ('level_5', 'Rig Cuántico',     750,   1200,  FALSE, 'Potencia cuántica para granjas grandes.'),
+    ('level_6', 'Centro de Datos',  1400,  2500,  FALSE, 'Un centro de datos completo a tu servicio.'),
+    ('level_7', 'Granja Cuántica',  2800,  5500,  FALSE, 'Granja cuántica de élite. Producción masiva.'),
+    ('level_8', 'Núcleo HCK',      5000,  12000, FALSE, 'El núcleo definitivo del juego. Potencia máxima.')
 ON CONFLICT (key) DO NOTHING;
 
 -- Misiones diarias
@@ -294,9 +301,9 @@ INSERT INTO config (key, value, description) VALUES
     ('hck_per_usdt',           '10000', 'HCK que vale 1 USDT al retirar (10.000 HCK = 1 USDT).'),
     ('withdrawal_fee_pct',     '2',     'Comisión de retiro en % sobre el importe en USDT.'),
     ('min_withdrawal_usdt',    '10',    'Retiro mínimo en USDT.'),
-    ('hck_per_hash_per_hour',  '10',    'HCK generados por cada H/s por cada hora de minería.'),
+    ('hck_per_hash_per_hour',  '20.83', 'HCK generados por cada H/s por cada hora de minería (nivel 1 recupera en 20 días).'),
     ('referral_bonus_hck',     '500',   'HCK de bono por cada referido que se registra.'),
-    ('storage_hours',          '8',     'Horas de producción que caben en el almacén antes de recolectar.')
+    ('storage_hours',          '24',    'Horas de producción que caben en el almacén antes de recolectar.')
 ON CONFLICT (key) DO NOTHING;
 
 COMMIT;
