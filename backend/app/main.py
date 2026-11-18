@@ -3,8 +3,10 @@
 Arranque: crea tablas, config y reward pool por defecto, y el primer admin
 desde ADMIN_USERNAME / ADMIN_PASSWORD (si estan definidos y no existe).
 """
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +21,47 @@ from app.routers import admin, auth, machines, mining, missions, public, wallet,
 
 log = logging.getLogger("crypto-mining-game")
 
-app = FastAPI(title="Crypto Mining Game API", version="1.0.0")
+
+async def _deposit_scanner_loop():
+    """Tarea en segundo plano: escanea depositos USDT entrantes cada
+    SCAN_INTERVAL_SECONDS. Solo acredita cuando hay direcciones de deposito y
+    API keys configuradas; si no, queda inactiva sin romper nada."""
+    from app.services import scanner
+    while True:
+        try:
+            if scanner.scan_configured()["active"]:
+                db = SessionLocal()
+                try:
+                    result = scanner.scan_all(db)
+                    if (result.get("bsc") or {}).get("credited"):
+                        log.info("Escaneo de depositos: %s", result)
+                finally:
+                    db.close()
+        except Exception as e:  # noqa: BLE001 - el loop nunca debe morir
+            log.warning("Error en el escaneo de depositos: %s", e)
+        await asyncio.sleep(cfg.SCAN_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if cfg.SECRET_KEY_GENERATED:
+        log.warning("SECRET_KEY no definida: se genero una efimera solo para desarrollo. "
+                    "Define SECRET_KEY en produccion o las sesiones se invalidaran al reiniciar.")
+    if not cfg.DEPOSIT_BSC_ADDRESS:
+        log.warning("Sin DEPOSIT_BSC_ADDRESS: los depositos quedaran en "
+                    "pending_verification y NUNCA se acreditaran automaticamente.")
+    init_db()
+    scanner_task = None
+    if cfg.SCAN_ENABLED:
+        scanner_task = asyncio.create_task(_deposit_scanner_loop())
+        log.info("Escaneo automatico de depositos activado (cada %ss, solo con "
+                 "direcciones y API keys configuradas)", cfg.SCAN_INTERVAL_SECONDS)
+    yield
+    if scanner_task is not None:
+        scanner_task.cancel()
+
+
+app = FastAPI(title="Crypto Mining Game API", version="1.0.0", lifespan=lifespan)
 app.middleware("http")(rate_limit_middleware)
 app.add_middleware(
     CORSMiddleware,
@@ -52,21 +94,12 @@ def init_db():
         db.close()
 
 
-@app.on_event("startup")
-def on_startup():
-    if cfg.SECRET_KEY_GENERATED:
-        log.warning("SECRET_KEY no definida: se genero una efimera solo para desarrollo. "
-                    "Define SECRET_KEY en produccion o las sesiones se invalidaran al reiniciar.")
-    if not cfg.DEPOSIT_BSC_ADDRESS and not cfg.DEPOSIT_TRON_ADDRESS:
-        log.warning("Sin DEPOSIT_BSC_ADDRESS ni DEPOSIT_TRON_ADDRESS: los depositos "
-                    "quedaran en pending_verification y NUNCA se acreditaran.")
-    init_db()
-
-
 @app.get("/health")
 def health():
+    from app.services import scanner
     return {"status": "ok", "db": db_kind(),
-            "deposits_configured": bool(cfg.DEPOSIT_BSC_ADDRESS or cfg.DEPOSIT_TRON_ADDRESS)}
+            "deposits_configured": bool(cfg.DEPOSIT_BSC_ADDRESS),
+            "auto_credit": scanner.scan_configured()}
 
 
 app.include_router(auth.router)
