@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]
+sqlalchemy>=2.0
+bcrypt
+python-jose[cryptography]
+pydantic>=2.0
+httpx
+python-multipart
+pytest
