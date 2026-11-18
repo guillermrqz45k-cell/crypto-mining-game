@@ -1,6 +1,6 @@
 """Produccion minera: calculo en servidor por tiempo transcurrido.
-HCK/hora = hashrate_total * produccion_por_hash (10 por defecto).
-Capacidad (nido) = produccion/hora * horas_almacenamiento (8 por defecto).
+HCK/hora = hashrate_total * produccion_por_hash (20,83 por defecto).
+Capacidad (nido) = produccion/hora * horas_almacenamiento (24 por defecto).
 Sin mineria activa no hay produccion. El pendiente nunca supera la capacidad.
 """
 from datetime import datetime, timezone
