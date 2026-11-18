@@ -2,8 +2,10 @@
 
 SIN claves de API (BSCSCAN_API_KEY / TRONGRID_API_KEY) el deposito queda en
 'pending_verification' y NUNCA se acredita. Con claves, se verifica on-chain:
-- BSC: BscScan token transfers del contrato USDT; debe existir el tx_hash,
-  to == DEPOSIT_BSC_ADDRESS y value == amount (18 decimales).
+- BSC: Etherscan API V2 (chainid 56), token transfers del contrato USDT; debe
+  existir el tx_hash, to == DEPOSIT_BSC_ADDRESS y value == amount (18 decimales).
+  BscScan ya no genera API keys propias: la clave es la de Etherscan V2
+  (misma clave para BSC y 60+ cadenas) y se configura en BSCSCAN_API_KEY.
 - TRON: TronGrid TRC-20 transfers; to == DEPOSIT_TRON_ADDRESS, value == amount
   (6 decimales), contrato USDT TRC-20.
 
@@ -15,18 +17,21 @@ import httpx
 
 from app.core import config
 
-BSCSCAN_URL = "https://api.bscscan.com/api"
+# Etherscan API V2 (una clave para 60+ cadenas; BSC = chainid 56).
+ETHERSCAN_V2_URL = "https://api.etherscan.io/v2/api"
+BSC_CHAIN_ID = "56"
 TRONGRID_URL = "https://api.trongrid.io"
 
 
 def _bsc_token_txs(deposit_address: str):
     params = {
+        "chainid": BSC_CHAIN_ID,
         "module": "account", "action": "tokentx",
         "contractaddress": config.USDT_BSC_CONTRACT,
         "address": deposit_address, "page": 1, "offset": 100,
         "sort": "desc", "apikey": config.BSCSCAN_API_KEY,
     }
-    r = httpx.get(BSCSCAN_URL, params=params, timeout=20)
+    r = httpx.get(ETHERSCAN_V2_URL, params=params, timeout=20)
     r.raise_for_status()
     return r.json().get("result", [])
 
