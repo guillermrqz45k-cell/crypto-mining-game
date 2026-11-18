@@ -1,13 +1,15 @@
 # CRYPTO MINING GAME — Plataforma de minería virtual de criptomonedas
 
+**Creador por Dark Mous**
+
 Plataforma web profesional de minería virtual, inspirada en Notcoin y Hamster Kombat.
 **La minería es virtual.** Las recompensas en HCK son puntos internos del juego y los
 retiros en USDT se pagan únicamente desde el fondo de recompensas real del proyecto.
 **Sin rentabilidad garantizada. Nunca se simulan depósitos, ganancias ni retiros reales.**
 
-> Estado: código completo en local. **Nada desplegado.** Pendiente de que AMO pase las
-> direcciones de depósito reales, las claves de BscScan/TronGrid y las credenciales de
-> producción (ver [Pendientes](#pendientes)).
+> Estado: código completo en local. **Nada desplegado.** Pendiente la API key de
+> BscScan (para la acreditación automática) y las credenciales de producción
+> (ver [Pendientes](#pendientes)).
 
 ## Estructura
 
@@ -15,17 +17,19 @@ retiros en USDT se pagan únicamente desde el fondo de recompensas real del proy
 crypto-mining-game/
 ├── backend/            # FastAPI (Python) — API REST, SQLite local / PostgreSQL en producción
 │   ├── app/            # main, core (config, db, seguridad, rate limit), models,
-│   │                   # services (economía, minería, verificación on-chain, misiones),
+│   │                   # services (economía, minería, verificación on-chain,
+│   │                   #          escáner de depósitos, misiones),
 │   │                   # routers (auth, mining, machines, missions, wallet, withdrawals,
 │   │                   #          public, admin)
-│   ├── tests/          # pytest — 35 tests
+│   ├── tests/          # pytest — 53 tests
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── README.md       # detalle de economía, depósitos, retiros y seguridad
 ├── frontend/           # React 18 + Vite — interfaz en español, móvil primero
 │   ├── src/pages/      # Auth, Dashboard (minería), Machines, Missions, Wallet,
 │   │                   # Withdrawals, Referrals, Leaderboard, Profile, Admin
-│   ├── src/components/ # Layout, ProductionChart (SVG), Confetti, WalletConnectButton
+│   ├── src/components/ # Layout, ProductionChart (SVG), MiningRoom (sala de minería),
+│   │                   # Confetti, WalletConnectButton
 │   └── src/api/client.js
 ├── contracts/          # HCKCOIN.sol (ERC-20 de referencia, NO desplegado) + README
 ├── db/                 # schema.sql — PostgreSQL, 15 tablas + seeds
@@ -41,9 +45,10 @@ crypto-mining-game/
 |---|---|---|
 | Moneda del juego | **HCKCOIN (HCK)**, puntos internos (no token on-chain) | — |
 | Tasa de retiro | **10.000 HCK = 1 USDT** | Admin → Configuración (`hck_per_usdt`) |
-| Producción | **10 HCK por H/s por hora** | `hck_per_hash_per_hour` |
-| Capacidad ("nido") | **8 horas** de producción; lleno = minería parada hasta recolectar | `storage_hours` |
-| Máquinas | 9 niveles: Nivel 0 Minero Inicial GRATIS/5 H/s · 1 Minero USB 10/10 · 2 Rig GPU 50/60 · 3 ASIC S9 150/200 · 4 Granja ASIC 350/500 · 5 Rig Cuántico 750/1200 · 6 Centro de Datos 1400/2500 · 7 Granja Cuántica 2800/5500 · 8 Núcleo HCK 5000/12000 | Catálogo en DB / admin |
+| Producción | **20,83 HCK por H/s por hora** | `hck_per_hash_per_hour` |
+| Capacidad ("nido") | **24 horas** de producción; lleno = minería parada hasta recolectar | `storage_hours` |
+| Recuperación (payback) | Nivel 1 ($10) **20 días**; nivel 2 ~16,7 días; nivel 3 15 días; nivel 4 14 días — a mayor inversión, más rápida la recuperación (recogiendo a diario) | `payback_days` en el catálogo |
+| Máquinas | 9 niveles: Nivel 0 Minero Inicial GRATIS/5 H/s · 1 Minero USB 10/10 · 2 Rig GPU 50/60 · 3 ASIC S9 150/200 · 4 Granja ASIC 350/500 · 5 Rig Cuántico 750/1200 · 6 Centro de Datos 1400/2500 · 7 Granja Cuántica 2800/5500 · 8 Núcleo HCK 5000/12000 — **solo 0-4 disponibles; 5-8 bloqueados ("Próximamente")** | Catálogo en DB / admin |
 | Mejora (overclock) | +25% hashrate por nivel, máx. 5 niveles; coste 20% del precio base × nivel | — |
 | XP / niveles | 1 XP por cada 100 HCK recolectados; nivel n = 1000×n XP; premio al subir = 500×n HCK | — |
 | Bono diario | Racha 7 días: 100, 200, 300, 400, 500, 750, 1000 HCK | — |
@@ -58,16 +63,32 @@ saldo, hashrate ni recompensas: ningún endpoint acepta esos valores del cliente
 
 ## Depósitos USDT (REAL, sin simulación)
 
-- Redes: **BNB Smart Chain (BEP-20)** y **TRON (TRC-20)**.
-- El usuario envía USDT a la dirección de depósito del proyecto y registra su `tx_hash`
-  en la billetera. El servidor verifica on-chain con **BscScan API** (BSC) o
-  **TronGrid** (TRON): la transacción debe existir, ir a la dirección de depósito y
-  coincidir en monto y token USDT.
+- **UNA SOLA dirección de depósito (BSC/BEP-20):** `0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d`
+  (la de AMO, misma que en Dragon Land). No hay dirección TRON.
+- El usuario envía USDT a esa dirección y registra su `tx_hash` en la
+  billetera. El servidor verifica on-chain con **BscScan API**: la transacción
+  debe existir, ir a la dirección de depósito y coincidir en monto y token USDT.
+- **Acreditación automática:** el usuario guarda su dirección BSC en su perfil
+  y un escáner en segundo plano (cada 5 min) consulta BscScan por las
+  transferencias USDT entrantes; si el remitente coincide con un usuario, el
+  depósito se acredita solo. Solo activo con `BSCSCAN_API_KEY` configurada.
+- **Aprobación manual:** sin la API key, el admin revisa el tx_hash en BscScan
+  y aprueba el depósito desde el panel (`POST /api/admin/deposits/{id}/approve`),
+  acreditando el saldo con audit log.
 - **Idempotencia:** `tx_hash` único en la base de datos. El mismo hash dos veces → 409,
   un solo crédito. Jamás se acredita dos veces la misma transacción.
-- **Sin datos de AMO, nada se acredita jamás:** sin `DEPOSIT_BSC_ADDRESS` /
-  `DEPOSIT_TRON_ADDRESS` y sin las claves de API, todo depósito queda en
-  `pending_verification` y el saldo sigue en 0. Verificado en smoke test.
+- **Sin la API key, nada se acredita automáticamente:** sin `BSCSCAN_API_KEY`,
+  todo depósito queda en `pending_verification` hasta la aprobación manual.
+  Verificado en tests (con mocks).
+
+## Sala de minería (realista)
+
+El Dashboard muestra la **sala de minería**: una unidad ASIC por cada máquina
+que el usuario posee de verdad (incluido el Minero Inicial gratis), con
+ventiladores girando, LEDs de estado, temperatura, hashrate y consumo por
+equipo. Un contador de HCK en vivo sube cada segundo según el hashrate real y
+la tasa de producción, y cada 100 HCK se registra un "bloque" visual. También
+muestra el saldo del fondo de recompensas.
 
 ## Retiros USDT
 
@@ -142,15 +163,18 @@ docker compose up --build
 
 ## Verificado
 
-- **Backend:** `pytest` → **35 passed, 3 warnings** (solo deprecations sin efecto).
-  Cubre registro/login, minería y cálculo de recompensas, compra de máquina, depósito
-  idempotente (sin doble crédito), retiro con comisión y aprobación, anti-manipulación
-  de saldo y rate limiting.
+- **Backend:** `pytest` → **53 passed, 1 warning** (solo deprecations sin efecto).
+  Cubre registro/login, minería y cálculo de recompensas (20,83 HCK por H/s por
+  hora, tope 24 h), compra de máquina (niveles bloqueados → 403), depósito
+  idempotente (sin doble crédito), escaneo automático por remitente (mockeado,
+  idempotente), aprobación manual de depósitos por el admin, retiro con comisión
+  y aprobación, anti-manipulación de saldo y rate limiting.
 - **Smoke test en vivo (uvicorn + curl, SQLite):** `/health` ok; registro/login/`/api/me`;
-  catálogo de 9 niveles; bono diario día 1 = 100 HCK; depósito sin claves →
+  catálogo de 9 niveles (0-4 disponibles, 5-8 bloqueados, payback nivel 1 = 20 días);
+  bono diario día 1 = 100 HCK; depósito sin claves →
   `pending_verification` (`sin BSCSCAN_API_KEY`), saldo 0; mismo `tx_hash` → 409;
   iniciar minería sin máquinas → 422; admin login y `/api/admin/stats` ok.
-- **Frontend:** `npm run build` → éxito (46 módulos, 1.48 s).
+- **Frontend:** `npm run build` → éxito (47 módulos).
 - **Contrato:** `npx solc --bin --abi HCKCOIN.sol` → exit 0, sin errores ni warnings
   (solc 0.8.38, bytecode 9.698 bytes).
 - **Compose:** YAML válido (postgres + api + frontend). `docker compose up` **no** se
@@ -158,14 +182,19 @@ docker compose up --build
 
 ## Pendientes
 
-- **AMO debe pasar:** `DEPOSIT_BSC_ADDRESS` y `DEPOSIT_TRON_ADDRESS` reales (hoy
-  vacías a propósito, sin ninguna dirección inventada), `BSCSCAN_API_KEY` y
-  `TRONGRID_API_KEY`, `SECRET_KEY` y credenciales admin de producción.
-- La verificación on-chain real contra BscScan/TronGrid con datos reales no se ha
-  probado en vivo (implementada y testeada con mocks); necesita dirección + claves.
+- **AMO debe pasar:** `BSCSCAN_API_KEY` (cuenta BscScan creada como
+  guillermrqz45k, pendiente de verificación de correo y de crear la key),
+  `SECRET_KEY` y credenciales admin de producción.
+- La verificación on-chain real contra BscScan con datos reales no se ha
+  probado en vivo (implementada y testeada con mocks); necesita la API key.
 - `docker compose up` pendiente de probar en un entorno con Docker.
 - WalletConnect: falta el Project ID (gratis en https://cloud.walletconnect.com) y
   la variable `VITE_WALLETCONNECT_PROJECT_ID`; el botón hoy conecta vía la wallet
   del navegador y el flujo con modal QR está documentado en
   `frontend/src/components/WalletConnectButton.jsx`.
-- Despliegue a Railway: a la espera de la aprobación de AMO.
+- Despliegue a Railway: **bloqueado** — el plan Trial está lleno (2 proyectos:
+  Robin Dark y Rifa) y AMO no quiso pasar al plan Hobby ("ya quedó así").
+  El repo con el código completo está en
+  https://github.com/guillermrqz45k-cell/crypto-mining-game.
+- Dirección de depósito BSC ya definida: `0x71457a5a883ae25b21fdf2cc8784201d56e8bc2d`.
+  No hay TRON.
